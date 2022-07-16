@@ -24,6 +24,7 @@ class PPO:
         clip=0.2,
         actor_learning_rate=1e-5,
         critic_learning_rate=1e-4,
+        activation="tanh"
         ):
 
         self.name = name
@@ -37,7 +38,11 @@ class PPO:
         self.actor_optimizer = Adam(learning_rate=actor_learning_rate)
         self.critic_optimizer = Adam(learning_rate=critic_learning_rate)
 
-        self.actor, self.critic = self.create_dense_tanh_models(input_shape, hidden_shape, output_shape)
+        if activation == "relu":
+            self.actor, self.critic = self.create_dense_relu_models(input_shape, hidden_shape, output_shape)
+        else:
+            self.actor, self.critic = self.create_dense_tanh_models(input_shape, hidden_shape, output_shape)
+
         self.actor.summary()
         self.critic.summary()
 
@@ -59,6 +64,29 @@ class PPO:
         prev_layer = input_layer
         for shape in hidden_shape:
             next_layer = Dense(shape, activation="tanh")(prev_layer)
+            prev_layer = next_layer
+        
+        output_layer = Dense(1, activation=None)(prev_layer)
+
+        critic = Model([input_layer], [output_layer], name="critic")
+
+        return actor, critic
+
+    def create_dense_relu_models(self, input_shape, hidden_shape, output_shape):
+        input_layer = Input(shape=input_shape)
+        prev_layer = input_layer
+        for shape in hidden_shape:
+            next_layer = Dense(shape, activation="relu")(prev_layer)
+            prev_layer = next_layer
+        
+        output_layer = Dense(output_shape, activation="softmax")(prev_layer)
+
+        actor = Model([input_layer], [output_layer], name="actor")
+
+        input_layer = Input(shape=input_shape)
+        prev_layer = input_layer
+        for shape in hidden_shape:
+            next_layer = Dense(shape, activation="relu")(prev_layer)
             prev_layer = next_layer
         
         output_layer = Dense(1, activation=None)(prev_layer)
