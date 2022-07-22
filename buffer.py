@@ -11,29 +11,27 @@ class Buffer:
         self.gamma = gamma
         self.memories = 0
 
+    def keys(self):
+        return ["states", "rewards", "actions", "probs", "values", "dones",
+                "advantages", "norm_advantages", "deltas", "returns"]
 
     def clear_rollout(self):
         self.rollout = {}
         for key in self.keys():
             self.rollout[key] = []
 
-    def keys(self):
-        return ["states", "rewards", "actions", "probs", "values", "dones",
-                "advantages", "norm_advantages", "deltas", "returns"]
-
-    def push_memories_to_rollout(self):
-        for key in self.keys():
-            self.rollout[key].extend(self.memory[key])
-    
     def clear_memory(self):
         self.memory = {}
         for key in self.keys():
             self.memory[key] = []
 
+    def push_memories_to_rollout(self):
+        for key in self.keys():
+            self.rollout[key].extend(self.memory[key])
+    
     def normalize_advantage_in_rollout(self):
         advantage_mean, advantage_std = (np.mean(self.rollout["advantages"]), np.std(self.rollout["advantages"]),)
         self.rollout["norm_advantages"]  = (self.rollout["advantages"] - advantage_mean) / advantage_std
-
 
     def add_experience(self, state, action, reward, done, prob, value):
         self.memory["states"].append(state)
@@ -41,7 +39,7 @@ class Buffer:
         self.memory["actions"].append(action)
         self.memory["probs"].append(prob)
         self.memory["values"].append(value)
-        self.memory["dones"].append(done)
+        self.memory["dones"].append(int(done))
         self.memories += 1
 
     def randomize_batches(self, batch_size, buffer_size):
@@ -50,7 +48,7 @@ class Buffer:
         batches = [batch[i * batch_size:(i + 1) * batch_size] for i in range((len(batch) + batch_size - 1) // batch_size)]
         return batches
 
-    def finish(self, value=0):
+    def finish_trajectory(self, value=0):
         rewards = np.array(self.memory["rewards"] + [value])
         values = np.array(self.memory["values"] + [value])
         self.memory["deltas"] = rewards[:-1] + self.gamma * values[1:] - values[:-1]
@@ -76,3 +74,11 @@ class Buffer:
         self.clear_rollout()
         memories, self.memories = self.memories, 0
         return rollout, memories
+
+    def get_trajectory(self, rollout, batch):
+        trajectory = {}
+
+        for k, v in rollout.items():
+            trajectory[k] = tf.convert_to_tensor([v[i] for i in batch], dtype=tf.float32)
+
+        return trajectory

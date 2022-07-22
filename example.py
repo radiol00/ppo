@@ -1,54 +1,43 @@
 import numpy as np
 import time
 import gym
-from old_ppo import PPO
-from matplotlib import pyplot as plt
-# env = gym.make("CartPole-v1", render_mode='human')
+from ppo import PPO
 env = gym.make("CartPole-v1")
-per_steps = 10_000
-# ppo = PPO(input_shape=4,
-#             output_shape=2,
-#             hidden_shape=(64, 64,),
-#             actor_learning_rate=1e-4,
-#             critic_learning_rate=1e-3,
-#             epochs=20,
-#             clip=0.2,
-#             activation="relu",
-#             batch_size=per_steps//10,
-#             name=f"PPO-{int(time.time())}")
-# steps = 0
+ppo = PPO(input_shape=4,
+            output_shape=2,
+            hidden_shape=(64, 64,),
+            actor_learning_rate=1e-4,
+            critic_learning_rate=1e-3,
+            epochs=80,
+            batch_size=100,
+            name=f"PPO-{int(time.time())}")
 
-# essa = []
-while True:
-    done = False
-    episode_reward = 0
-    state, info = env.reset(seed=42, return_info=True)
+steps_per_session = 5_000
+sessions = 25
+for i in range(sessions):
+    session_results, steps = [], 0
+    while steps < steps_per_session:
+        state, done, result = env.reset(seed=42), False, 0
+        while not done:
 
-    while not done:
-        # steps = steps + 1
-        # action, prob, probs, val = ppo.predict(state)
-        action = np.random.randint(0, 2)
-        next_state, reward, done, _ = env.step(action)
-        state = next_state
-        # episode_reward += reward
-        print(reward, done)
+            action, action_prob, probs = ppo.policy(state)
+            value = ppo.value(state)
 
-        if done:
-            exit(-1)
-        
-        # ppo.add_experience(state, action, 1 if not done else 2_000, done, prob, val)
+            next_state, reward, done, _ = env.step(action)
+            result += reward
 
-        # if done:
-        #     essa.append(episode_reward)
-        
-        # if steps % per_steps == 0 and steps != 0:
-        #     essa = np.array(essa)
-        #     print("mean:", int(essa.mean()), "max:", essa.max(), "min:", essa.min())
-        #     steps = 0
-        #     essa = []
-        #     ppo.learn()
-        #     ppo.save_weights()
+            ppo.buffer.add_experience(state, action, reward, done, action_prob, value)
+
+            state = next_state
+
+            steps += 1
+
+            if done or steps == steps_per_session:
+                ppo.buffer.finish_trajectory(0 if done else ppo.value(state))
+                session_results.append(result)
+                done = True
+    print(f"Session {i+1}, Mean reward: {np.mean(session_results):.0f}")
+    ppo.learn()
         
 env.close()
 ppo.save_weights()
-plt.show()

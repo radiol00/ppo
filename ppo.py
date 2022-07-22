@@ -25,7 +25,8 @@ class PPO:
         clip=0.2,
         actor_learning_rate=1e-5,
         critic_learning_rate=1e-4,
-        activation="tanh"
+        activation="relu",
+        target_kl=0.01,
         ):
 
         self.name = name
@@ -35,6 +36,7 @@ class PPO:
         self.batch_size = batch_size
         self.epochs = epochs
         self.clip = clip
+        self.target_kl = target_kl
 
         self.actor_optimizer = Adam(learning_rate=actor_learning_rate)
         self.critic_optimizer = Adam(learning_rate=critic_learning_rate)
@@ -80,10 +82,12 @@ class PPO:
         print(f"{self.name} weights saved")
 
     def load_weights(self, actor_path, critic_path):
-        self.actor.load_weights(actor_path)
-        print(f"{self.name} actor weights loaded")
-        self.critic.load_weights(critic_path)
-        print(f"{self.name} critic weights loaded")
+        if actor_path is not None:
+            self.actor.load_weights(actor_path)
+            print(f"{self.name} actor weights loaded")
+        if critic_path is not None:
+            self.critic.load_weights(critic_path)
+            print(f"{self.name} critic weights loaded")
 
     def policy(self, state):
         actor_pred = self.actor(np.array(state)[np.newaxis, :], training=False)[0]
@@ -91,49 +95,47 @@ class PPO:
         action = distribution.sample()
         return int(action), distribution.prob(action), actor_pred
 
-    def v(self, state):
+    def value(self, state):
         critic_pred = self.critic(np.array(state)[np.newaxis, :], training=False)[0][0].numpy()
         return critic_pred
 
-    def train_policy(self, rollout):
-        pass
+    def train_policy(self, states, actions, old_probs, advantages):
+        with tf.GradientTape() as tape:
+            new_probs = tf.clip_by_value(self.actor(states), clip_value_min=1e-30, clip_value_max=1e+30)
+            new_probs = Categorical(probs=new_probs).prob(actions)
 
-    def train_value(self, rollout):
-        pass
+            prob_ratios = tf.divide(new_probs, old_probs)
+
+            unclipped = tf.multiply(advantages, prob_ratios)
+            clipped = tf.multiply(tf.clip_by_value(prob_ratios, 1-self.clip, 1+self.clip), advantages)
+            
+            policy_loss = tf.multiply(tf.constant(-1.0), tf.reduce_mean(tf.minimum(unclipped, clipped)))
+
+        gradients = tape.gradient(policy_loss, self.actor.trainable_variables)
+        self.actor_optimizer.apply_gradients(zip(gradients, self.actor.trainable_variables))
+
+        kl = tf.reduce_mean(tf.divide(old_probs, new_probs))
+        kl = tf.reduce_sum(kl)
+        return kl
+            
+    def train_value(self, states, returns):
+        with tf.GradientTape() as tape:
+            value_loss = tf.reduce_mean((returns - self.critic(states)) ** 2)
+        gradients = tape.gradient(value_loss, self.critic.trainable_variables)
+        self.critic_optimizer.apply_gradients(zip(gradients, self.critic.trainable_variables))
 
     def learn(self):
-        # print(self.buffer.get_rollout())
         rollout, size = self.buffer.get_rollout()
         batches = self.buffer.randomize_batches(self.batch_size, size)
-        print(batches)
-        # for i in range(size):
-        #     print(rollout['states'][i], rollout['rewards'][i], rollout['advantages'][i], rollout['returns'][i])
-        # self.calculate_advantage()
-        # batches = self.randomize_batches()
-        # for batch in batches:
-        #     states, actions, advantages, old_probs, old_vals = self.get_batch_buffer(batch)
-        #     for _ in range(self.epochs):
-        #         with tf.GradientTape() as tape1, tf.GradientTape() as tape2:
-        #             new_probs = self.actor(states)
-        #             new_probs = tf.clip_by_value(new_probs, clip_value_min=1e-30, clip_value_max=1e+30)
-        #             new_vals = self.critic(states)
 
-        #             distributions = Categorical(probs=new_probs)
+        for batch in batches:
+            traj = self.buffer.get_trajectory(rollout, batch)
 
-        #             new_probs = distributions.prob(actions)
-        #             prob_ratios = tf.divide(new_probs, old_probs)
+            for _ in range(self.epochs):
+                kl = self.train_policy(traj["states"], traj["actions"], traj["probs"], traj["advantages"])
+                if kl > 1.5 * self.target_kl:
+                    break
 
-        #             unclipped = tf.multiply(advantages, prob_ratios)
-        #             clipped = tf.multiply(tf.clip_by_value(prob_ratios, 1-self.clip, 1+self.clip), advantages)
-        #             surrogate_obj = tf.multiply(tf.constant(-1.0), tf.reduce_mean(tf.minimum(unclipped, clipped)))
+            for _ in range(self.epochs):
+                self.train_value(traj["states"], traj["returns"])
 
-        #             loss = tf.subtract(tf.add(advantages, old_vals), new_vals)
-        #             loss = tf.square(loss)
-        #             loss = tf.reduce_mean(loss)
-
-        #         grad1 = tape1.gradient(surrogate_obj, self.actor.trainable_variables)
-        #         grad2 = tape2.gradient(loss, self.critic.trainable_variables)
-        #         self.actor_optimizer.apply_gradients(zip(grad1, self.actor.trainable_variables))
-        #         self.critic_optimizer.apply_gradients(zip(grad2, self.critic.trainable_variables))
-
-        # self.clear_memory()
