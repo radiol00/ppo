@@ -1,10 +1,10 @@
+import numpy as np
+import time
 import gym
 from old_ppo import PPO
 from matplotlib import pyplot as plt
 # env = gym.make("CartPole-v1", render_mode='human')
 env = gym.make("CartPole-v1")
-import time
-import numpy as np
 per_steps = 10_000
 # ppo = PPO(input_shape=4,
 #             output_shape=2,
@@ -23,7 +23,7 @@ while True:
     done = False
     episode_reward = 0
     state, info = env.reset(seed=42, return_info=True)
-    
+
     while not done:
         # steps = steps + 1
         # action, prob, probs, val = ppo.predict(state)
