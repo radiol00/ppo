@@ -55,7 +55,7 @@ class PPO:
             return self.create_dense_models(input_shape, hidden_shape, output_shape, activation)
         elif self.nn_class == "conv":
             return self.create_conv_models(input_shape, hidden_shape, output_shape, activation)
-        else
+        else:
             raise NotImplementedError
 
     def create_conv_models(self, input_shape, hidden_shape, output_shape, activation):
