@@ -63,7 +63,7 @@ class PPO:
 
         for shape in hidden_shape:
             next_layer = Conv2D(
-                shape, (2, 2), activation=activation)(prev_layer)
+                shape, (3, 3), activation=activation)(prev_layer)
             prev_layer = next_layer
 
         flatten_layer = Flatten()(prev_layer)
@@ -76,7 +76,7 @@ class PPO:
 
         for shape in hidden_shape:
             next_layer = Conv2D(
-                shape, (2, 2), activation=activation)(prev_layer)
+                shape, (3, 3), activation=activation)(prev_layer)
             prev_layer = next_layer
 
         flatten_layer = Flatten()(prev_layer)
