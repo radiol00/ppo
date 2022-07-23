@@ -9,8 +9,6 @@ import time
 import tensorflow as tf
 from tensorflow_probability.python.distributions import Categorical
 
-epsilon = np.finfo(np.float32).eps.item() 
-
 class PPO:
     def __init__(
         self,
@@ -93,7 +91,7 @@ class PPO:
         actor_pred = self.actor(np.array(state)[np.newaxis, :], training=False)[0]
         distribution = Categorical(probs=actor_pred)
         action = distribution.sample()
-        return int(action), distribution.prob(action), actor_pred
+        return int(action), distribution.prob(action).numpy(), actor_pred
 
     def value(self, state):
         critic_pred = self.critic(np.array(state)[np.newaxis, :], training=False)[0][0].numpy()
