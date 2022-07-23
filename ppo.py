@@ -1,8 +1,9 @@
 from importlib.metadata import distribution
+from matplotlib.cbook import flatten
 import numpy as np
 from buffer import Buffer
 from keras.api._v2.keras.optimizers import Adam
-from keras.api._v2.keras.layers import Input, Dense
+from keras.api._v2.keras.layers import Input, Dense, Conv2D, Flatten
 from keras.api._v2.keras import Model
 import os
 import time
@@ -25,9 +26,11 @@ class PPO:
         critic_learning_rate=1e-4,
         activation="relu",
         target_kl=0.01,
+        nn_class="dense"
         ):
 
         self.name = name
+        self.nn_class = nn_class
 
         self.discount_factor = discount_factor
         self.lambda_val = lambda_val
@@ -39,13 +42,48 @@ class PPO:
         self.actor_optimizer = Adam(learning_rate=actor_learning_rate)
         self.critic_optimizer = Adam(learning_rate=critic_learning_rate)
 
-        self.actor, self.critic = self.create_dense_models(input_shape, hidden_shape, output_shape, activation)
+        self.actor, self.critic = self.create_models(input_shape, hidden_shape, output_shape, activation)
 
         self.actor.summary()
         self.critic.summary()
 
         self.buffer = Buffer(lmbda=lambda_val, gamma=discount_factor)
 
+
+    def create_models(self, input_shape, hidden_shape, output_shape, activation):
+        if self.nn_class == "dense":
+            return self.create_dense_models(input_shape, hidden_shape, output_shape, activation)
+        elif self.nn_class == "conv":
+            return self.create_conv_models(input_shape, hidden_shape, output_shape, activation)
+        else
+            raise NotImplementedError
+
+    def create_conv_models(self, input_shape, hidden_shape, output_shape, activation):
+        input_layer = Input(shape=input_shape)
+        prev_layer = input_layer
+
+        for shape in hidden_shape:
+            next_layer = Conv2D(shape, (2, 2), activation=activation)(prev_layer)
+            prev_layer = next_layer
+
+        flatten_layer = Flatten()(prev_layer)
+        output_layer = Dense(output_shape, activation="softmax")(flatten_layer)
+
+        actor = Model([input_layer], [output_layer], name="actor")
+
+        input_layer = Input(shape=input_shape)
+        prev_layer = input_layer
+
+        for shape in hidden_shape:
+            next_layer = Conv2D(shape, (2, 2), activation=activation)(prev_layer)
+            prev_layer = next_layer
+
+        flatten_layer = Flatten()(prev_layer)
+        output_layer = Dense(1, activation=None)(flatten_layer)
+
+        critic = Model([input_layer], [output_layer], name="critic")
+
+        return actor, critic
 
     def create_dense_models(self, input_shape, hidden_shape, output_shape, activation):
         input_layer = Input(shape=input_shape)
